@@ -75,11 +75,11 @@ def test_demo_config_loads_relative_skill_and_mcp_paths() -> None:
     config = load_config(demo_config_path, env={})
 
     assert config.skills[0].name == "briefing-writer"
-    assert config.skills[0].path == demo_config_path.parent / "skills" / "briefing-writer"
+    assert config.skills[0].path == (demo_config_path.parent / "skills" / "briefing-writer").resolve()
     assert config.mcp_servers[0].name == "demo-policy"
     assert config.mcp_servers[0].command == "python"
     assert config.mcp_servers[0].args == ["mcp_server.py"]
-    assert config.mcp_servers[0].cwd == demo_config_path.parent
+    assert config.mcp_servers[0].cwd == demo_config_path.parent.resolve()
 
 
 @pytest.mark.asyncio
