@@ -16,6 +16,7 @@ from agents.sandbox.workspace_paths import (
     coerce_posix_path,
     posix_path_as_path,
 )
+from tests.sandbox._symlink import requires_symlink
 
 PathInput = str | PurePath
 PathPolicyMethod = Callable[[WorkspacePathPolicy, PathInput], Path]
@@ -175,6 +176,7 @@ def test_relative_path(test_case: WorkspacePathCase) -> None:
     )
 
 
+@requires_symlink
 def test_normalize_path_with_symlink_resolution(tmp_path: Path) -> None:
     workspace = tmp_path / "workspace"
     outside = tmp_path / "outside"
@@ -497,6 +499,7 @@ def test_extra_path_grant_allows_read_under_read_only_grant() -> None:
     assert policy.normalize_path("/opt/toolchain/cache.db") == Path("/opt/toolchain/cache.db")
 
 
+@requires_symlink
 def test_host_io_rejects_write_under_resolved_read_only_extra_path_grant(
     tmp_path: Path,
 ) -> None:
@@ -578,6 +581,7 @@ def test_extra_path_grant_rejects_root_alias_path() -> None:
     }
 
 
+@requires_symlink
 def test_host_io_rejects_extra_path_grant_symlink_to_root(tmp_path: Path) -> None:
     workspace = tmp_path / "workspace"
     root_alias = tmp_path / "root-alias"

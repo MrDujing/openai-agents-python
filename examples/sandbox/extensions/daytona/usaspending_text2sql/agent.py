@@ -66,7 +66,7 @@ AUDIT_LOG_PATH = EXAMPLE_DIR / ".audit_log.jsonl"
 _downloads_base_url: str = ""
 
 DEVELOPER_INSTRUCTIONS = (
-    (SCHEMA_DIR / "overview.md").read_text()
+    (SCHEMA_DIR / "overview.md").read_text(encoding="utf-8")
     + """
 
 ## Instructions

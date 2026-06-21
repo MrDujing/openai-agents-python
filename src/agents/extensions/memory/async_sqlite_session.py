@@ -93,9 +93,10 @@ class AsyncSQLiteSession(SessionABC):
 
         async with self._init_lock:
             if self._connection is None:
-                self._connection = await aiosqlite.connect(str(self.db_path))
-                await self._connection.execute("PRAGMA journal_mode=WAL")
-                await self._init_db_for_connection(self._connection)
+                conn = await aiosqlite.connect(str(self.db_path))
+                await conn.execute("PRAGMA journal_mode=WAL")
+                await self._init_db_for_connection(conn)
+                self._connection = conn
 
         return self._connection
 

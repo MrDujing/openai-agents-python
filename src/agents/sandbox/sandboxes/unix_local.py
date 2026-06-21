@@ -283,6 +283,7 @@ class UnixLocalSandboxSession(BaseSandboxSession):
             env=env,
         )
 
+        process: asyncio.subprocess.Process
         if tty:
             primary_fd, secondary_fd = os.openpty()
 

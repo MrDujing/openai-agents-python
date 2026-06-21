@@ -4,7 +4,7 @@ import base64
 import io
 import uuid
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 import pytest
 
@@ -17,6 +17,13 @@ from agents.sandbox.types import ExecResult, User
 from agents.tool import ToolOutputImage
 from agents.tool_context import ToolContext
 from tests.utils.factories import TestSessionState
+
+
+def _coerce_user_name(user: Any) -> str | None:
+    if user is None or isinstance(user, str):
+        return user
+    return cast(str, user.name)
+
 
 _MAX_IMAGE_BYTES = 10 * 1024 * 1024
 _PNG_BASE64 = (
@@ -47,7 +54,8 @@ class _ImageSession(BaseSandboxSession):
         return True
 
     async def read(self, path: Path, *, user: str | User | None = None) -> io.BytesIO:
-        self.read_users.append(user.name if isinstance(user, User) else user)
+        user_name = _coerce_user_name(user)
+        self.read_users.append(user_name)
         normalized = self.normalize_path(path)
         if normalized not in self.files:
             raise FileNotFoundError(normalized)
@@ -85,7 +93,8 @@ class _ImageSession(BaseSandboxSession):
 
 class _ProviderNotFoundImageSession(_ImageSession):
     async def read(self, path: Path, *, user: str | User | None = None) -> io.BytesIO:
-        self.read_users.append(user.name if isinstance(user, User) else user)
+        user_name = _coerce_user_name(user)
+        self.read_users.append(user_name)
         normalized = self.normalize_path(path)
         if normalized in self.files:
             return io.BytesIO(self.files[normalized])

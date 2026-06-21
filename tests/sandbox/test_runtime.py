@@ -3058,6 +3058,7 @@ async def test_session_manager_reapplies_capability_manifest_mutations_on_resume
                 starting_agent=agent,
             ),
         )
+        assert run_state is not None
         run_state._current_agent = agent
         serialized_state = client.serialize_session_state(session_state)
         run_state._sandbox = {

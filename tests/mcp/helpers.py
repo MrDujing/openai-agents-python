@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import shutil
+import sys
 from typing import Any
 
 from mcp import Tool as MCPTool
@@ -23,7 +24,7 @@ from agents.mcp.server import _UNSET, _MCPServerWithClientSession, _UnsetType
 from agents.mcp.util import MCPToolCustomDataExtractor, MCPToolMetaResolver, ToolFilter
 from agents.tool import ToolErrorFunction
 
-tee = shutil.which("tee") or ""
+tee = shutil.which("tee") or sys.executable
 assert tee, "tee not found"
 
 

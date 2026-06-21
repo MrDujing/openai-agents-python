@@ -878,7 +878,10 @@ class TestSendEventAndConfig(TestOpenAIRealtimeWebSocketModel):
         """Interrupt should send response.cancel even when auto cancel is enabled."""
         model._audio_state_tracker.set_audio_format("pcm16")
         model._audio_state_tracker.on_audio_delta("item_1", 0, b"\x00" * 4800)
-        await model._mark_response_created()
+        state = model._audio_state_tracker.get_state("item_1", 0)
+        assert state is not None
+        state.initial_received_time = datetime.now() - timedelta(seconds=1)
+        model._ongoing_response = True
         model._created_session = SimpleNamespace(
             audio=SimpleNamespace(
                 input=SimpleNamespace(turn_detection=SimpleNamespace(interrupt_response=True))
@@ -908,6 +911,9 @@ class TestSendEventAndConfig(TestOpenAIRealtimeWebSocketModel):
         """Interrupt should avoid sending response.cancel when relying on automatic cancellation."""
         model._audio_state_tracker.set_audio_format("pcm16")
         model._audio_state_tracker.on_audio_delta("item_1", 0, b"\x00" * 4800)
+        state = model._audio_state_tracker.get_state("item_1", 0)
+        assert state is not None
+        state.initial_received_time = datetime.now() - timedelta(seconds=1)
         model._ongoing_response = True
         model._created_session = SimpleNamespace(
             audio=SimpleNamespace(

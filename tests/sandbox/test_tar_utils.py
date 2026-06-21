@@ -15,6 +15,7 @@ from agents.sandbox.util.tar_utils import (
     strip_tar_member_prefix,
     validate_tar_bytes,
 )
+from tests.sandbox._symlink import requires_symlink
 
 
 @dataclass(frozen=True)
@@ -71,6 +72,7 @@ def _safe_extract(raw: bytes, root: Path) -> None:
         safe_extract_tarfile(tar, root=root)
 
 
+@requires_symlink
 def test_safe_extract_tarfile_preserves_venv_style_symlinks(tmp_path: Path) -> None:
     raw = _tar_bytes(
         _dir("."),
@@ -193,6 +195,7 @@ def test_strip_tar_member_prefix_rewrites_pax_path_headers() -> None:
         assert member.pax_headers["path"] == ("a" * 120) + ".txt"
 
 
+@requires_symlink
 def test_safe_extract_tarfile_can_rehydrate_existing_leaf_symlink(tmp_path: Path) -> None:
     raw = _tar_bytes(_symlink("link.txt", "/usr/local/bin/python3"))
 
@@ -219,6 +222,7 @@ def test_safe_extract_tarfile_rejects_external_symlink_target_in_strict_mode(
             )
 
 
+@requires_symlink
 def test_safe_extract_tarfile_can_replace_existing_leaf_file_with_symlink(
     tmp_path: Path,
 ) -> None:
@@ -231,6 +235,7 @@ def test_safe_extract_tarfile_can_replace_existing_leaf_file_with_symlink(
     assert os.readlink(tmp_path / "link.txt") == "target.txt"
 
 
+@requires_symlink
 def test_safe_extract_tarfile_can_replace_existing_leaf_symlink_with_file(
     tmp_path: Path,
 ) -> None:
@@ -244,6 +249,7 @@ def test_safe_extract_tarfile_can_replace_existing_leaf_symlink_with_file(
     assert not (tmp_path / "python").is_symlink()
 
 
+@requires_symlink
 def test_safe_extract_tarfile_can_replace_existing_leaf_symlink_with_directory(
     tmp_path: Path,
 ) -> None:
@@ -312,6 +318,7 @@ def test_validate_tar_bytes_specific_symlink_rejection_does_not_reject_children(
     )
 
 
+@requires_symlink
 def test_safe_extract_tarfile_rejects_preexisting_symlink_parent(
     tmp_path: Path,
 ) -> None:
@@ -328,6 +335,7 @@ def test_safe_extract_tarfile_rejects_preexisting_symlink_parent(
     assert not (outside / "pwned.txt").exists()
 
 
+@requires_symlink
 def test_safe_extract_tarfile_rejects_symlink_under_preexisting_symlink_parent(
     tmp_path: Path,
 ) -> None:

@@ -1532,8 +1532,12 @@ async def test_agent_as_tool_preserves_namespace_for_nested_tool_context(
         del cls, starting_agent, input
         nested_context = kwargs.get("context")
         assert isinstance(nested_context, ToolContext)
-        assert nested_context.tool_namespace == "billing"
-        assert nested_context.qualified_tool_name == "billing.lookup_account"
+        tool_namespace = nested_context.tool_namespace  # pyright: ignore[reportOptionalMemberAccess]
+        qualified_tool_name = nested_context.qualified_tool_name  # pyright: ignore[reportOptionalMemberAccess]
+        assert tool_namespace is not None
+        assert qualified_tool_name is not None
+        assert tool_namespace == "billing"
+        assert qualified_tool_name == "billing.lookup_account"
         return DummyResult()
 
     monkeypatch.setattr(Runner, "run", classmethod(fake_run))

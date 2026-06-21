@@ -8,6 +8,7 @@ import tarfile
 import tempfile
 from collections.abc import Iterable
 from pathlib import Path, PurePosixPath, PureWindowsPath
+from typing import cast
 
 
 class UnsafeTarMemberError(ValueError):
@@ -111,7 +112,7 @@ def strip_tar_member_prefix(data: io.IOBase, *, prefix: str | Path) -> io.IOBase
     if prefix_rel == Path():
         raise ValueError("tar member prefix must not be empty")
 
-    out = tempfile.TemporaryFile()
+    out = cast(io.IOBase, tempfile.TemporaryFile())
     try:
         with data:
             with tarfile.open(fileobj=data, mode="r|*") as src:

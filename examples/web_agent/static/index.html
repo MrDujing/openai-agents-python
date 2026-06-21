@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Local Web Agent</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div>
+            <h1>Web Agent</h1>
+            <p id="status">Ready</p>
+          </div>
+          <button id="new-session" class="icon-button" title="New chat" type="button">+</button>
+        </div>
+        <div id="sessions" class="sessions"></div>
+      </aside>
+
+      <section class="workspace">
+        <header class="toolbar">
+          <div>
+            <h2 id="session-title">New chat</h2>
+            <p id="session-id">No session selected</p>
+          </div>
+          <div class="actions">
+            <button id="compact-session" type="button">Compact</button>
+            <button id="clear-session" type="button">Clear</button>
+          </div>
+        </header>
+
+        <div id="messages" class="messages" aria-live="polite"></div>
+
+        <section id="approval" class="approval hidden">
+          <div>
+            <strong>Tool approval required</strong>
+            <p id="approval-detail"></p>
+          </div>
+          <div class="actions">
+            <button id="approve-tool" type="button">Approve</button>
+            <button id="reject-tool" type="button">Reject</button>
+          </div>
+        </section>
+
+        <form id="chat-form" class="composer">
+          <textarea
+            id="message-input"
+            rows="3"
+            placeholder="Ask the agent..."
+            autocomplete="off"
+          ></textarea>
+          <button id="send-message" type="submit">Send</button>
+        </form>
+      </section>
+    </main>
+    <script src="/app.js"></script>
+  </body>
+</html>
+

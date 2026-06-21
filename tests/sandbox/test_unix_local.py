@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import signal
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -14,6 +15,9 @@ from agents.sandbox.sandboxes.unix_local import (
 )
 from agents.sandbox.snapshot import NoopSnapshot
 from agents.sandbox.types import ExecResult, User
+
+_SIGQUIT_NAME = "SIGQUIT"
+_SIGQUIT = cast(signal.Signals, getattr(signal, _SIGQUIT_NAME))
 
 
 class _RecordingUnixLocalSession(UnixLocalSandboxSession):
@@ -111,7 +115,7 @@ class TestUnixLocalPty:
         ("signum", "chars"),
         [
             pytest.param(signal.SIGINT, "\x03", id="sigint"),
-            pytest.param(signal.SIGQUIT, "\x1c", id="sigquit"),
+            pytest.param(_SIGQUIT, "\x1c", id="sigquit"),
         ],
     )
     @pytest.mark.asyncio

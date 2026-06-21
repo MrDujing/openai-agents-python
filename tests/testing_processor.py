@@ -7,6 +7,8 @@ from typing import Any, Literal
 from agents.tracing import Span, Trace, TracingProcessor
 
 TestSpanProcessorEvent = Literal["trace_start", "trace_end", "span_start", "span_end"]
+NodeKey = tuple[str, str | None]
+SpanNodeKey = tuple[str, str]
 
 
 class SpanProcessorForTests(TracingProcessor):
@@ -96,7 +98,7 @@ def assert_no_traces():
 def fetch_normalized_spans(
     keep_span_id: bool = False, keep_trace_id: bool = False
 ) -> list[dict[str, Any]]:
-    nodes: dict[tuple[str, str | None], dict[str, Any]] = {}
+    nodes: dict[NodeKey, dict[str, Any]] = {}
     traces = []
     for trace_obj in fetch_traces():
         trace = trace_obj.export()
@@ -111,11 +113,20 @@ def fetch_normalized_spans(
 
     assert traces, "Use assert_no_traces() to check for empty traces"
 
+    entries: list[
+        tuple[
+            SpanNodeKey,
+            NodeKey,
+            dict[str, Any],
+            bool,
+        ]
+    ] = []
     for span_obj in fetch_ordered_spans():
         span = span_obj.export()
         assert span
         assert span.pop("object") == "trace.span"
         assert span["id"].startswith("span_")
+        assert span_obj.span_id is not None
         if not keep_span_id:
             del span["id"]
         assert datetime.fromisoformat(span.pop("started_at"))
@@ -133,13 +144,39 @@ def fetch_normalized_spans(
             custom_data = span_data.get("data")
             if isinstance(custom_data, dict):
                 sdk_span_type = custom_data.get("sdk_span_type")
-        if span["type"] in {"task", "turn"} or sdk_span_type in {"task", "turn"}:
-            parent = nodes[(trace_id, parent_id)]
+        hidden_span = span["type"] in {"task", "turn"} or sdk_span_type in {"task", "turn"}
+        key = (trace_id, span_obj.span_id)
+        parent_key = (trace_id, parent_id)
+        entries.append((key, parent_key, span, hidden_span))
+        if not hidden_span:
+            nodes[key] = span
+
+    entries_by_key: dict[NodeKey, tuple[NodeKey, dict[str, Any], bool]] = {
+        key: (parent_key, span, hidden) for key, parent_key, span, hidden in entries
+    }
+
+    def resolve_visible_parent(parent_key: NodeKey) -> dict[str, Any]:
+        if parent_key in nodes:
+            return nodes[parent_key]
+        entry = entries_by_key.get(parent_key)
+        if entry is None:
+            raise AssertionError(f"Span parent was not recorded: {parent_key!r}")
+        grandparent_key, hidden_span, is_hidden = entry
+        if not is_hidden:
+            raise AssertionError(f"Visible span parent was not indexed: {parent_key!r}")
+        parent = resolve_visible_parent(grandparent_key)
+        if "error" in hidden_span and "error" not in parent:
+            parent["error"] = hidden_span["error"]
+        nodes[parent_key] = parent
+        return parent
+
+    for key, parent_key, span, hidden_span in entries:
+        if hidden_span:
+            parent = resolve_visible_parent(parent_key)
             if "error" in span and "error" not in parent:
                 parent["error"] = span["error"]
-            nodes[(trace_id, span_obj.span_id)] = parent
+            nodes[key] = parent
             continue
-
-        nodes[(span_obj.trace_id, span_obj.span_id)] = span
-        nodes[(trace_id, parent_id)].setdefault("children", []).append(span)
+        parent = resolve_visible_parent(parent_key)
+        parent.setdefault("children", []).append(span)
     return traces

@@ -198,7 +198,10 @@ async def test_complex_async_tracing() -> None:
         SPAN_PROCESSOR_TESTING.clear()
         await complex_async_tracing()
 
-        assert fetch_normalized_spans(keep_span_id=True) == (
+        spans = fetch_normalized_spans(keep_span_id=True)
+        spans[0]["children"] = sorted(spans[0]["children"], key=lambda span: span["id"])
+
+        assert spans == (
             [
                 {
                     "workflow_name": "test",

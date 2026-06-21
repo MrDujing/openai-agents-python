@@ -25,6 +25,12 @@ from agents.tool_context import ToolContext
 from tests.utils.factories import TestSessionState
 
 
+def _coerce_user_name(user: Any) -> str | None:
+    if user is None or isinstance(user, str):
+        return user
+    return cast(str, user.name)
+
+
 class _ShellSession(BaseSandboxSession):
     def __init__(self, manifest: Manifest) -> None:
         self.state = TestSessionState(
@@ -70,7 +76,8 @@ class _ShellSession(BaseSandboxSession):
         user: str | User | None = None,
         shell: bool | list[str] = False,
     ) -> ExecResult:
-        self.exec_users.append(user.name if isinstance(user, User) else user)
+        user_name = _coerce_user_name(user)
+        self.exec_users.append(user_name)
         rendered_command = " ".join(str(part) for part in command)
         self.exec_calls.append((rendered_command, timeout, shell))
         return ExecResult(
@@ -119,7 +126,8 @@ class _OutputShellSession(_ShellSession):
         user: str | User | None = None,
         shell: bool | list[str] = False,
     ) -> ExecResult:
-        self.exec_users.append(user.name if isinstance(user, User) else user)
+        user_name = _coerce_user_name(user)
+        self.exec_users.append(user_name)
         rendered_command = " ".join(str(part) for part in command)
         self.exec_calls.append((rendered_command, timeout, shell))
         return ExecResult(stdout=self.stdout, stderr=self.stderr, exit_code=self.exit_code)
@@ -148,7 +156,8 @@ class _PtyShellSession(_ShellSession):
         max_output_tokens: int | None = None,
     ) -> PtyExecUpdate:
         _ = (command, timeout, shell, tty, max_output_tokens)
-        self.last_exec_user = user.name if isinstance(user, User) else user
+        user_name = _coerce_user_name(user)
+        self.last_exec_user = user_name
         self.last_exec_yield_time_s = yield_time_s
         session_id = self._next_session_id
         self._next_session_id += 1

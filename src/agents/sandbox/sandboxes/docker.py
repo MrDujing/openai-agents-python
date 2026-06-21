@@ -1236,7 +1236,7 @@ class DockerSandboxSession(BaseSandboxSession):
     async def hydrate_workspace(self, data: io.IOBase) -> None:
         root = self._workspace_root_path()
         error_root = posix_path_for_error(root)
-        with tempfile.TemporaryFile() as archive:
+        with cast(io.IOBase, tempfile.TemporaryFile()) as archive:
             while True:
                 chunk = data.read(io.DEFAULT_BUFFER_SIZE)
                 if chunk in ("", b""):

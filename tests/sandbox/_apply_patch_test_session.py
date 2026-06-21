@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 import uuid
 from pathlib import Path
+from typing import Any, cast
 
 from agents.sandbox import Manifest
 from agents.sandbox.errors import WorkspaceReadNotFoundError
@@ -10,6 +11,12 @@ from agents.sandbox.session.base_sandbox_session import BaseSandboxSession
 from agents.sandbox.snapshot import NoopSnapshot
 from agents.sandbox.types import ExecResult, User
 from tests.utils.factories import TestSessionState
+
+
+def _coerce_user_name(user: Any) -> str | None:
+    if user is None or isinstance(user, str):
+        return user
+    return cast(str, user.name)
 
 
 class ApplyPatchSession(BaseSandboxSession):
@@ -115,7 +122,7 @@ class UserRecordingApplyPatchSession(ApplyPatchSession):
 
     @staticmethod
     def _user_name(user: str | User | None) -> str | None:
-        return user.name if isinstance(user, User) else user
+        return _coerce_user_name(user)
 
     async def read(self, path: Path, *, user: str | User | None = None) -> io.BytesIO:
         self.read_users.append(self._user_name(user))

@@ -1478,14 +1478,15 @@ async def test_guardrail_via_agent_and_run_config_equivalent():
 
 
 @pytest.mark.asyncio
-async def test_blocking_guardrail_cancels_remaining_on_trigger():
+async def test_blocking_guardrail_skips_remaining_on_trigger():
     """
-    Test that when one blocking guardrail triggers, remaining guardrails
+    Test that when one blocking guardrail triggers, remaining blocking guardrails
     are cancelled (non-streaming).
     """
     fast_guardrail_executed = False
     slow_guardrail_executed = False
     slow_guardrail_cancelled = False
+    slow_guardrail_started = asyncio.Event()
     timestamps = {}
 
     @input_guardrail(run_in_parallel=False)
@@ -1494,6 +1495,7 @@ async def test_blocking_guardrail_cancels_remaining_on_trigger():
     ) -> GuardrailFunctionOutput:
         nonlocal fast_guardrail_executed
         timestamps["fast_start"] = time.time()
+        await slow_guardrail_started.wait()
         await asyncio.sleep(SHORT_DELAY)
         fast_guardrail_executed = True
         timestamps["fast_end"] = time.time()
@@ -1508,8 +1510,9 @@ async def test_blocking_guardrail_cancels_remaining_on_trigger():
     ) -> GuardrailFunctionOutput:
         nonlocal slow_guardrail_executed, slow_guardrail_cancelled
         timestamps["slow_start"] = time.time()
+        slow_guardrail_started.set()
         try:
-            await asyncio.sleep(MEDIUM_DELAY)
+            await asyncio.sleep(1)
             slow_guardrail_executed = True
             timestamps["slow_end"] = time.time()
             return GuardrailFunctionOutput(
@@ -1536,11 +1539,9 @@ async def test_blocking_guardrail_cancels_remaining_on_trigger():
     # Verify the fast guardrail executed
     assert fast_guardrail_executed is True, "Fast guardrail should have executed"
 
-    # Verify the slow guardrail was cancelled, not completed
+    # Verify the slow guardrail was cancelled, not completed.
     assert slow_guardrail_cancelled is True, "Slow guardrail should have been cancelled"
     assert slow_guardrail_executed is False, "Slow guardrail should NOT have completed execution"
-
-    # Verify timing: cancellation happened shortly after fast guardrail triggered
     assert "fast_end" in timestamps
     assert "slow_cancelled" in timestamps
     cancellation_delay = timestamps["slow_cancelled"] - timestamps["fast_end"]
@@ -1560,14 +1561,15 @@ async def test_blocking_guardrail_cancels_remaining_on_trigger():
 
 
 @pytest.mark.asyncio
-async def test_blocking_guardrail_cancels_remaining_on_trigger_streaming():
+async def test_blocking_guardrail_skips_remaining_on_trigger_streaming():
     """
-    Test that when one blocking guardrail triggers, remaining guardrails
+    Test that when one blocking guardrail triggers, remaining blocking guardrails
     are cancelled (streaming).
     """
     fast_guardrail_executed = False
     slow_guardrail_executed = False
     slow_guardrail_cancelled = False
+    slow_guardrail_started = asyncio.Event()
     timestamps = {}
 
     @input_guardrail(run_in_parallel=False)
@@ -1576,6 +1578,7 @@ async def test_blocking_guardrail_cancels_remaining_on_trigger_streaming():
     ) -> GuardrailFunctionOutput:
         nonlocal fast_guardrail_executed
         timestamps["fast_start"] = time.time()
+        await slow_guardrail_started.wait()
         await asyncio.sleep(SHORT_DELAY)
         fast_guardrail_executed = True
         timestamps["fast_end"] = time.time()
@@ -1590,8 +1593,9 @@ async def test_blocking_guardrail_cancels_remaining_on_trigger_streaming():
     ) -> GuardrailFunctionOutput:
         nonlocal slow_guardrail_executed, slow_guardrail_cancelled
         timestamps["slow_start"] = time.time()
+        slow_guardrail_started.set()
         try:
-            await asyncio.sleep(MEDIUM_DELAY)
+            await asyncio.sleep(1)
             slow_guardrail_executed = True
             timestamps["slow_end"] = time.time()
             return GuardrailFunctionOutput(
@@ -1621,11 +1625,9 @@ async def test_blocking_guardrail_cancels_remaining_on_trigger_streaming():
     # Verify the fast guardrail executed
     assert fast_guardrail_executed is True, "Fast guardrail should have executed"
 
-    # Verify the slow guardrail was cancelled, not completed
+    # Verify the slow guardrail was cancelled, not completed.
     assert slow_guardrail_cancelled is True, "Slow guardrail should have been cancelled"
     assert slow_guardrail_executed is False, "Slow guardrail should NOT have completed execution"
-
-    # Verify timing: cancellation happened shortly after fast guardrail triggered
     assert "fast_end" in timestamps
     assert "slow_cancelled" in timestamps
     cancellation_delay = timestamps["slow_cancelled"] - timestamps["fast_end"]

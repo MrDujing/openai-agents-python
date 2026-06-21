@@ -60,6 +60,7 @@ from agents.sandbox.session.base_sandbox_session import BaseSandboxSession
 from agents.sandbox.session.runtime_helpers import RESOLVE_WORKSPACE_PATH_HELPER
 from agents.sandbox.snapshot import NoopSnapshot
 from agents.sandbox.types import ExecResult, Permissions
+from tests.sandbox._symlink import requires_symlink
 
 
 class _FakeDockerContainer:
@@ -965,6 +966,7 @@ async def test_docker_read_returns_file_bytes_without_archive_api(tmp_path: Path
 
 
 @pytest.mark.asyncio
+@requires_symlink
 async def test_docker_normalize_path_preserves_safe_leaf_symlink_path(tmp_path: Path) -> None:
     host_root = tmp_path / "container"
     workspace = host_root / "workspace"
@@ -1033,6 +1035,7 @@ async def test_docker_write_rejects_read_only_extra_path_grant(tmp_path: Path) -
 
 
 @pytest.mark.asyncio
+@requires_symlink
 async def test_docker_write_rejects_workspace_symlink_to_read_only_extra_path_grant(
     tmp_path: Path,
 ) -> None:
@@ -1064,6 +1067,7 @@ async def test_docker_write_rejects_workspace_symlink_to_read_only_extra_path_gr
 
 
 @pytest.mark.asyncio
+@requires_symlink
 async def test_docker_write_rejects_workspace_symlink_to_nested_read_only_extra_path_grant(
     tmp_path: Path,
 ) -> None:
@@ -1105,6 +1109,7 @@ async def test_docker_write_rejects_workspace_symlink_to_nested_read_only_extra_
 
 
 @pytest.mark.asyncio
+@requires_symlink
 async def test_docker_rm_unlinks_safe_internal_leaf_symlink(tmp_path: Path) -> None:
     host_root = tmp_path / "container"
     workspace = host_root / "workspace"
@@ -1126,6 +1131,7 @@ async def test_docker_rm_unlinks_safe_internal_leaf_symlink(tmp_path: Path) -> N
 
 
 @pytest.mark.asyncio
+@requires_symlink
 async def test_docker_workspace_file_ops_reject_symlink_escape(tmp_path: Path) -> None:
     host_root = tmp_path / "container"
     workspace = host_root / "workspace"

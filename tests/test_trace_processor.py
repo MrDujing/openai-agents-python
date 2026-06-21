@@ -625,6 +625,19 @@ def test_tracing_atexit_cleanup_timeout_preserves_process_exit_code_on_504() -> 
         """
     )
 
+    env = os.environ.copy()
+    env["NO_PROXY"] = "*"
+    env["no_proxy"] = "*"
+    for proxy_var in (
+        "ALL_PROXY",
+        "all_proxy",
+        "HTTP_PROXY",
+        "http_proxy",
+        "HTTPS_PROXY",
+        "https_proxy",
+    ):
+        env.pop(proxy_var, None)
+
     try:
         result = subprocess.run(
             [sys.executable, "-c", script],
@@ -632,6 +645,7 @@ def test_tracing_atexit_cleanup_timeout_preserves_process_exit_code_on_504() -> 
             capture_output=True,
             text=True,
             timeout=10.0,
+            env=env,
         )
     finally:
         server.shutdown()

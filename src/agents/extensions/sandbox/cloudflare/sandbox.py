@@ -1000,6 +1000,7 @@ class CloudflareSandboxSession(BaseSandboxSession):
 
         try:
             ws = await self._session().ws_connect(self._ws_pty_url())
+            assert ws is not None
 
             ready_deadline = time.monotonic() + 30.0
             while True:

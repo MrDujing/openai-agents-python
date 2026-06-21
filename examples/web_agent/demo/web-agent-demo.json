@@ -1,0 +1,31 @@
+{
+  "name": "Local Web Agent Demo",
+  "model": "gpt-5.4-mini",
+  "instructions": "You are a local web agent demo. Use the briefing-writer skill for concise briefs and the demo MCP server for policy lookups when relevant.",
+  "data_dir": "examples/web_agent/.data",
+  "compaction": {
+    "enabled": true,
+    "auto": false,
+    "model": "gpt-4.1",
+    "candidate_threshold": 10,
+    "mode": "auto"
+  },
+  "skills": [
+    {
+      "name": "briefing-writer",
+      "description": "Create compact operational briefings from notes and task lists.",
+      "path": "skills/briefing-writer"
+    }
+  ],
+  "mcp_servers": [
+    {
+      "name": "demo-policy",
+      "transport": "stdio",
+      "command": "python",
+      "args": ["mcp_server.py"],
+      "cwd": ".",
+      "cache_tools": true,
+      "require_approval": "never"
+    }
+  ]
+}
