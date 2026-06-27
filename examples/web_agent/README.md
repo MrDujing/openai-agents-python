@@ -34,7 +34,9 @@ Then ask:
 - `Use the briefing-writer skill to summarize: launch is green, docs are pending, owner is Mei.`
 - `Use the demo-policy MCP server to look up the session policy.`
 
-The demo MCP server is a local Python stdio server, so it does not require Node or network access.
+The demo uses Chat Completions mode by default so OpenAI-compatible endpoints can run it with
+`OPENAI_BASE_URL`, `OPENAI_API_KEY`, and `OPENAI_DEFAULT_MODEL`. The demo MCP server is a local
+Python stdio server, so it does not require Node or network access.
 
 ## Configuration
 
@@ -44,6 +46,8 @@ Pass a JSON config file with `--config path/to/web-agent.json`, or set `WEB_AGEN
 {
   "name": "Local Web Agent",
   "model": "gpt-5.4-mini",
+  "model_api": "responses",
+  "tracing_disabled": false,
   "instructions": "Answer clearly and use tools only when helpful.",
   "data_dir": ".web-agent-data",
   "compaction": {
@@ -75,6 +79,8 @@ Pass a JSON config file with `--config path/to/web-agent.json`, or set `WEB_AGEN
 Environment overrides:
 
 - `WEB_AGENT_MODEL`
+- `WEB_AGENT_MODEL_API` (`responses` or `chat_completions`)
+- `WEB_AGENT_TRACING_DISABLED`
 - `WEB_AGENT_NAME`
 - `WEB_AGENT_INSTRUCTIONS`
 - `WEB_AGENT_DATA_DIR`
@@ -88,6 +94,9 @@ Environment overrides:
 
 Local shell skills are disabled unless configured. When enabled, shell tool calls require
 approval by default.
+
+SDK tracing is enabled by default for Responses mode. In Chat Completions mode it defaults to
+disabled because OpenAI-compatible endpoints commonly use provider-specific API keys.
 
 The separate `E:\SSSClaude006` project was reviewed only for product ideas. Features such
 as workspace `.agent` metadata, task panels, team/subagent state, workflow YAML, ZeroMQ

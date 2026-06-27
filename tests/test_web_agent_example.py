@@ -28,6 +28,8 @@ def test_load_config_parses_skills_and_mcp(tmp_path: Path) -> None:
             {
                 "name": "Ops Agent",
                 "model": "gpt-test",
+                "model_api": "chat_completions",
+                "tracing_disabled": False,
                 "data_dir": "agent-data",
                 "compaction": {
                     "enabled": False,
@@ -59,6 +61,9 @@ def test_load_config_parses_skills_and_mcp(tmp_path: Path) -> None:
 
     assert config.name == "Ops Agent"
     assert config.model == "gpt-test"
+    assert config.model_api == "chat_completions"
+    assert config.tracing_disabled is False
+    assert config.resolved_tracing_disabled is False
     assert config.data_dir == tmp_path / "agent-data"
     assert config.compaction.enabled is False
     assert config.compaction.auto is False
@@ -75,11 +80,30 @@ def test_demo_config_loads_relative_skill_and_mcp_paths() -> None:
     config = load_config(demo_config_path, env={})
 
     assert config.skills[0].name == "briefing-writer"
-    assert config.skills[0].path == (demo_config_path.parent / "skills" / "briefing-writer").resolve()
+    assert config.model_api == "chat_completions"
+    assert config.resolved_tracing_disabled is True
+    expected_skill_path = (demo_config_path.parent / "skills" / "briefing-writer").resolve()
+    assert config.skills[0].path == expected_skill_path
     assert config.mcp_servers[0].name == "demo-policy"
     assert config.mcp_servers[0].command == "python"
     assert config.mcp_servers[0].args == ["mcp_server.py"]
     assert config.mcp_servers[0].cwd == demo_config_path.parent.resolve()
+
+
+def test_env_overrides_model_api_model_and_tracing(tmp_path: Path) -> None:
+    config = load_config(
+        None,
+        env={
+            "OPENAI_DEFAULT_MODEL": "provider-default",
+            "WEB_AGENT_MODEL_API": "chat_completions",
+            "WEB_AGENT_TRACING_DISABLED": "false",
+            "WEB_AGENT_DATA_DIR": str(tmp_path),
+        },
+    )
+
+    assert config.model == "provider-default"
+    assert config.model_api == "chat_completions"
+    assert config.resolved_tracing_disabled is False
 
 
 @pytest.mark.asyncio
@@ -96,9 +120,14 @@ async def test_demo_mcp_server_lists_and_calls_tools() -> None:
 
         result = await server.call_tool("lookup_demo_policy", {"topic": "session"})
 
-    text = "\n".join(
-        item.text for item in result.content if getattr(item, "type", None) == "text"
-    )
+    text_parts: list[str] = []
+    for item in result.content:
+        if getattr(item, "type", None) != "text":
+            continue
+        item_text = getattr(item, "text", None)
+        if isinstance(item_text, str):
+            text_parts.append(item_text)
+    text = "\n".join(text_parts)
     assert "one session per task" in text
 
 
@@ -129,6 +158,23 @@ def test_build_agent_adds_shell_tool_for_configured_skill(tmp_path: Path) -> Non
     assert agent.tools[0].name == "shell"
 
 
+def test_build_agent_adds_function_skill_for_chat_completions(tmp_path: Path) -> None:
+    skill_dir = tmp_path / "briefing-writer"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text("# Briefing Writer\n", encoding="utf-8")
+    config = WebAgentConfig(
+        data_dir=tmp_path,
+        model_api="chat_completions",
+        compaction=_disabled_compaction(),
+    )
+    config.skills.append(_skill_config("briefing-writer", skill_dir))
+
+    agent = build_agent(config, model=FakeModel())
+
+    assert len(agent.tools) == 1
+    assert agent.tools[0].name == "briefing_writer"
+
+
 @pytest.mark.asyncio
 async def test_web_agent_chat_uses_session_and_fake_model(tmp_path: Path) -> None:
     config = WebAgentConfig(data_dir=tmp_path, compaction=_disabled_compaction())
@@ -141,6 +187,20 @@ async def test_web_agent_chat_uses_session_and_fake_model(tmp_path: Path) -> Non
     assert response["output"] == "hello from fake model"
     assert response["session"]["session_id"]
     assert len(await app.sessions.get_items(response["session"]["session_id"])) == 2
+
+
+def test_web_agent_run_config_uses_resolved_tracing(tmp_path: Path) -> None:
+    config = WebAgentConfig(
+        data_dir=tmp_path,
+        model_api="chat_completions",
+        compaction=_disabled_compaction(),
+    )
+    app = create_app(config, model=FakeModel())
+
+    assert app._run_config().tracing_disabled is True
+
+    config.tracing_disabled = False
+    assert app._run_config().tracing_disabled is False
 
 
 @pytest.mark.asyncio

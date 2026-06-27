@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import unquote, urlparse
 
-from agents import ItemHelpers, Runner, RunState
+from agents import ItemHelpers, RunConfig, Runner, RunState, set_default_openai_api
 from agents.items import ToolApprovalItem
 from agents.models.interface import Model
 from agents.usage import serialize_usage
@@ -38,7 +38,12 @@ class WebAgentApplication:
 
         async with connected_mcp_servers(self.config) as mcp_servers:
             agent = build_agent(self.config, mcp_servers=mcp_servers, model=self.model)
-            result = await Runner.run(agent, message, session=session)
+            result = await Runner.run(
+                agent,
+                message,
+                session=session,
+                run_config=self._run_config(),
+            )
 
         metadata = self.sessions.touch_session(metadata.session_id, title=message)
         if result.interruptions:
@@ -92,7 +97,12 @@ class WebAgentApplication:
                         else None,
                     )
             session = await self.sessions.get_session(session_id)
-            result = await Runner.run(agent, state, session=session)
+            result = await Runner.run(
+                agent,
+                state,
+                session=session,
+                run_config=self._run_config(),
+            )
 
         metadata = self.sessions.touch_session(session_id)
         if result.interruptions:
@@ -148,12 +158,16 @@ class WebAgentApplication:
         items = await self.sessions.get_items(session_id, limit=limit)
         return {"session_id": session_id, "items": items}
 
+    def _run_config(self) -> RunConfig:
+        return RunConfig(tracing_disabled=self.config.resolved_tracing_disabled)
+
 
 def create_app(
     config: WebAgentConfig,
     *,
     model: Model | str | None = None,
 ) -> WebAgentApplication:
+    set_default_openai_api(config.model_api)
     return WebAgentApplication(config, model=model)
 
 
@@ -269,6 +283,7 @@ def create_server(
     *,
     model: Model | str | None = None,
 ) -> ThreadingHTTPServer:
+    set_default_openai_api(config.model_api)
     app = WebAgentApplication(config, model=model)
 
     class Handler(WebAgentRequestHandler):
@@ -282,6 +297,8 @@ def run_server(host: str, port: int, config: WebAgentConfig) -> None:
     server = create_server(host, port, config)
     print(f"Web agent ready at http://{host}:{port}")
     print(f"Model: {config.model}")
+    print(f"Model API: {config.model_api}")
+    print(f"Tracing disabled: {config.resolved_tracing_disabled}")
     print(f"Session DB: {config.resolved_sessions_db}")
     try:
         server.serve_forever()

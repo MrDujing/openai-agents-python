@@ -176,7 +176,7 @@ class WebAgentSessionStore:
     def _build_session(self, session_id: str) -> Session:
         underlying = SQLiteSession(session_id, self.db_path)
         compaction = self.config.compaction
-        if not compaction.enabled:
+        if not compaction.enabled or self.config.model_api == "chat_completions":
             return underlying
 
         return OpenAIResponsesCompactionSession(

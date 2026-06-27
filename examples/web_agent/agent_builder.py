@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import textwrap
 from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -16,9 +17,11 @@ from agents import (
     ShellResult,
     ShellTool,
     ShellToolLocalSkill,
+    function_tool,
 )
 from agents.mcp import MCPServer, MCPServerSse, MCPServerStdio, MCPServerStreamableHttp
 from agents.models.interface import Model
+from agents.tool import FunctionTool
 
 from .config import LocalSkillConfig, MCPServerConfig, WebAgentConfig
 
@@ -78,7 +81,7 @@ def build_agent(
 ) -> Agent[Any]:
     tools: list[Any] = []
     if config.skills:
-        tools.append(_build_shell_tool(config))
+        tools.extend(_build_skill_tools(config))
 
     resolved_model = model if model is not None else config.model
     return Agent(
@@ -93,6 +96,12 @@ def build_agent(
         },
         model_settings=ModelSettings(),
     )
+
+
+def _build_skill_tools(config: WebAgentConfig) -> list[ShellTool | FunctionTool]:
+    if config.model_api == "chat_completions":
+        return [_build_function_skill_tool(skill) for skill in config.skills]
+    return [_build_shell_tool(config)]
 
 
 @asynccontextmanager
@@ -133,6 +142,70 @@ def _to_shell_skill(skill: LocalSkillConfig) -> ShellToolLocalSkill:
         "description": description,
         "path": str(skill.path),
     }
+
+
+def _build_function_skill_tool(skill: LocalSkillConfig) -> FunctionTool:
+    skill_text = _read_skill_text(skill)
+    description = skill.description or f"Apply the {skill.name} local skill workflow."
+
+    def apply_local_skill(input_text: str) -> str:
+        """Apply a configured local skill to user-provided text."""
+        return _apply_briefing_writer_skill(input_text, skill_text=skill_text)
+
+    return function_tool(
+        apply_local_skill,
+        name_override=skill.name.replace("-", "_"),
+        description_override=description,
+    )
+
+
+def _read_skill_text(skill: LocalSkillConfig) -> str:
+    skill_file = skill.path / "SKILL.md" if skill.path.is_dir() else skill.path
+    try:
+        return skill_file.read_text(encoding="utf-8")
+    except OSError:
+        return skill.description or f"Local skill {skill.name}"
+
+
+def _apply_briefing_writer_skill(input_text: str, *, skill_text: str) -> str:
+    facts = [line.strip(" -\t") for line in input_text.splitlines() if line.strip()]
+    if not facts:
+        facts = [input_text.strip()]
+    if not any(facts):
+        return "Missing information: notes or task details."
+
+    lowered = [fact.lower() for fact in facts]
+    risks = [
+        fact
+        for fact, lower in zip(facts, lowered, strict=True)
+        if any(keyword in lower for keyword in ("risk", "block", "blocked", "pending", "issue"))
+    ]
+    actions = [
+        fact
+        for fact, lower in zip(facts, lowered, strict=True)
+        if any(keyword in lower for keyword in ("owner", "next", "todo", "due", "pending"))
+    ]
+    situation = "; ".join(facts[:3])
+
+    return textwrap.dedent(
+        f"""
+        Situation
+        {situation}
+
+        Risks
+        {_format_briefing_items(risks) or "No explicit risks were provided."}
+
+        Next actions
+        {_format_briefing_items(actions) or "Confirm owner, deadline, and next action."}
+
+        Skill source
+        {skill_text.splitlines()[0] if skill_text else "Local skill"}
+        """
+    ).strip()
+
+
+def _format_briefing_items(items: list[str]) -> str:
+    return "\n".join(f"- {item}" for item in items[:5])
 
 
 def _build_mcp_server(config: MCPServerConfig) -> MCPServer:

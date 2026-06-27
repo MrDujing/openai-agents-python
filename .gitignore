@@ -159,3 +159,4 @@ tmp/
 # execplans
 plans/
 .vercel
+.omo/

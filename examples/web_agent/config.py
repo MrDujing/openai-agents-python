@@ -9,6 +9,7 @@ from typing import Any, Literal
 
 MCPTransport = Literal["stdio", "sse", "streamable_http"]
 MCPRequireApproval = bool | Literal["always", "never"]
+ModelAPI = Literal["responses", "chat_completions"]
 
 
 def _default_data_dir() -> Path:
@@ -49,6 +50,8 @@ class CompactionConfig:
 class WebAgentConfig:
     name: str = "Local Web Agent"
     model: str = "gpt-5.4-mini"
+    model_api: ModelAPI = "responses"
+    tracing_disabled: bool | None = None
     instructions: str = (
         "You are a helpful local web agent. Answer clearly and ask for clarification "
         "when the user request is ambiguous."
@@ -66,6 +69,12 @@ class WebAgentConfig:
     @property
     def resolved_sessions_db(self) -> Path:
         return self.sessions_db or self.data_dir / "sessions.sqlite"
+
+    @property
+    def resolved_tracing_disabled(self) -> bool:
+        if self.tracing_disabled is not None:
+            return self.tracing_disabled
+        return self.model_api == "chat_completions"
 
 
 def load_config(
@@ -102,6 +111,10 @@ def _apply_mapping(config: WebAgentConfig, payload: dict[str, Any]) -> None:
         config.name = _require_str(payload["name"], "name")
     if "model" in payload:
         config.model = _require_str(payload["model"], "model")
+    if "model_api" in payload:
+        config.model_api = _parse_model_api(payload["model_api"], "model_api")
+    if "tracing_disabled" in payload:
+        config.tracing_disabled = bool(payload["tracing_disabled"])
     if "instructions" in payload:
         config.instructions = _require_str(payload["instructions"], "instructions")
 
@@ -245,6 +258,15 @@ def _parse_mcp_transport(value: Any, name: str) -> MCPTransport:
     raise ValueError(f"Unsupported MCP transport: {transport}")
 
 
+def _parse_model_api(value: Any, name: str) -> ModelAPI:
+    model_api = _require_str(value, name)
+    if model_api == "responses":
+        return "responses"
+    if model_api == "chat_completions":
+        return "chat_completions"
+    raise ValueError(f"{name} must be responses or chat_completions")
+
+
 def _optional_config_str(value: Any, name: str) -> str | None:
     if value is None:
         return None
@@ -254,8 +276,14 @@ def _optional_config_str(value: Any, name: str) -> str | None:
 def _apply_env(config: WebAgentConfig, env: Mapping[str, str]) -> None:
     if env.get("WEB_AGENT_MODEL"):
         config.model = env["WEB_AGENT_MODEL"]
+    elif env.get("OPENAI_DEFAULT_MODEL"):
+        config.model = env["OPENAI_DEFAULT_MODEL"]
     if env.get("WEB_AGENT_NAME"):
         config.name = env["WEB_AGENT_NAME"]
+    if env.get("WEB_AGENT_MODEL_API"):
+        config.model_api = _parse_model_api(env["WEB_AGENT_MODEL_API"], "WEB_AGENT_MODEL_API")
+    if env.get("WEB_AGENT_TRACING_DISABLED"):
+        config.tracing_disabled = _env_bool(env["WEB_AGENT_TRACING_DISABLED"])
     if env.get("WEB_AGENT_INSTRUCTIONS"):
         config.instructions = env["WEB_AGENT_INSTRUCTIONS"]
     if env.get("WEB_AGENT_DATA_DIR"):

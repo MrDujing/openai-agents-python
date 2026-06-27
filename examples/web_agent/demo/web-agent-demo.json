@@ -1,6 +1,7 @@
 {
   "name": "Local Web Agent Demo",
   "model": "gpt-5.4-mini",
+  "model_api": "chat_completions",
   "instructions": "You are a local web agent demo. Use the briefing-writer skill for concise briefs and the demo MCP server for policy lookups when relevant.",
   "data_dir": "examples/web_agent/.data",
   "compaction": {
