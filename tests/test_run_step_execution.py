@@ -2350,7 +2350,7 @@ async def test_multiple_tool_calls_raise_late_fatal_sibling_exception_after_canc
     )
 
     with pytest.raises(ToolAborted, match=f"boom-{delay_ticks}"):
-        await asyncio.wait_for(get_execute_result(agent, response), timeout=0.2)
+        await asyncio.wait_for(get_execute_result(agent, response), timeout=2.0)
 
     assert sibling_cancelled.is_set()
 

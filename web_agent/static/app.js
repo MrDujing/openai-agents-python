@@ -284,8 +284,17 @@ async function clearSession() {
   }
 }
 
+function handleMessageKeydown(event) {
+  if (event.key !== "Enter" || event.shiftKey || event.isComposing || event.keyCode === 229) {
+    return;
+  }
+  event.preventDefault();
+  els.form.requestSubmit();
+}
+
 els.newSession.addEventListener("click", createSession);
 els.form.addEventListener("submit", sendMessage);
+els.input.addEventListener("keydown", handleMessageKeydown);
 els.compact.addEventListener("click", compactSession);
 els.clear.addEventListener("click", clearSession);
 els.approveTool.addEventListener("click", () => decideApproval(true));

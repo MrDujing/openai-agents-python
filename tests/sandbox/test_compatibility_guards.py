@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import dataclasses
+import sys
 import uuid
 from collections.abc import Iterable
 from typing import Any, TypeVar, cast
@@ -63,7 +64,12 @@ def _make_session_state(cls: type[StateT], **overrides: object) -> StateT:
 
 
 def _import_optional_class(module_name: str, class_name: str) -> type[Any]:
-    module = pytest.importorskip(module_name)
+    try:
+        module = pytest.importorskip(module_name)
+    except ImportError as exc:
+        if sys.platform != "win32" or module_name != "agents.sandbox.sandboxes.unix_local":
+            raise
+        pytest.skip(f"{module_name} is unavailable on this platform: {exc}")
     value = getattr(module, class_name)
     assert isinstance(value, type)
     return cast(type[Any], value)

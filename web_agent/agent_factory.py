@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import os
-import textwrap
 from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -19,7 +18,13 @@ from agents import (
     ShellToolLocalSkill,
     function_tool,
 )
-from agents.mcp import MCPServer, MCPServerSse, MCPServerStdio, MCPServerStreamableHttp
+from agents.mcp import (
+    MCPServer,
+    MCPServerManager,
+    MCPServerSse,
+    MCPServerStdio,
+    MCPServerStreamableHttp,
+)
 from agents.models.interface import Model
 from agents.tool import FunctionTool
 
@@ -87,7 +92,7 @@ def build_agent(
     return Agent(
         name=config.name,
         model=resolved_model,
-        instructions=config.instructions,
+        instructions=_build_instructions(config),
         tools=tools,
         mcp_servers=list(mcp_servers or []),
         mcp_config={
@@ -100,26 +105,22 @@ def build_agent(
 
 def _build_skill_tools(config: WebAgentConfig) -> list[ShellTool | FunctionTool]:
     if config.model_api == "chat_completions":
-        return [_build_function_skill_tool(skill) for skill in config.skills]
+        return [_build_load_skill_tool(config.skills)]
     return [_build_shell_tool(config)]
 
 
 @asynccontextmanager
 async def connected_mcp_servers(config: WebAgentConfig) -> AsyncIterator[list[MCPServer]]:
     servers = [_build_mcp_server(server_config) for server_config in config.mcp_servers]
-    if not servers:
-        yield []
-        return
-
-    connected: list[MCPServer] = []
-    try:
-        for server in servers:
-            await server.connect()
-            connected.append(server)
-        yield connected
-    finally:
-        for server in reversed(connected):
-            await server.cleanup()
+    async with MCPServerManager(
+        servers,
+        connect_timeout_seconds=config.mcp_connect_timeout_seconds,
+        cleanup_timeout_seconds=config.mcp_cleanup_timeout_seconds,
+        drop_failed_servers=True,
+        strict=config.mcp_strict,
+        connect_in_parallel=config.mcp_connect_in_parallel,
+    ) as manager:
+        yield manager.active_servers
 
 
 def _build_shell_tool(config: WebAgentConfig) -> ShellTool:
@@ -144,18 +145,26 @@ def _to_shell_skill(skill: LocalSkillConfig) -> ShellToolLocalSkill:
     }
 
 
-def _build_function_skill_tool(skill: LocalSkillConfig) -> FunctionTool:
-    skill_text = _read_skill_text(skill)
-    description = skill.description or f"Apply the {skill.name} local skill workflow."
+def _build_load_skill_tool(skills: Sequence[LocalSkillConfig]) -> FunctionTool:
+    skills_by_name = {skill.name: skill for skill in skills}
+    aliases = {skill.name.replace("-", "_"): skill.name for skill in skills}
+    available = ", ".join(sorted(skills_by_name)) or "none"
 
-    def apply_local_skill(input_text: str) -> str:
-        """Apply a configured local skill to user-provided text."""
-        return _apply_briefing_writer_skill(input_text, skill_text=skill_text)
+    def load_local_skill(skill_name: str) -> str:
+        """Load the SKILL.md instructions for a configured local skill."""
+        normalized_name = aliases.get(skill_name, skill_name)
+        skill = skills_by_name.get(normalized_name)
+        if skill is None:
+            return f"Unknown local skill {skill_name!r}. Available skills: {available}."
+        return _read_skill_text(skill)
 
     return function_tool(
-        apply_local_skill,
-        name_override=skill.name.replace("-", "_"),
-        description_override=description,
+        load_local_skill,
+        name_override="load_local_skill",
+        description_override=(
+            "Load the SKILL.md instructions for one configured local skill. "
+            f"Available skills: {available}."
+        ),
     )
 
 
@@ -167,45 +176,23 @@ def _read_skill_text(skill: LocalSkillConfig) -> str:
         return skill.description or f"Local skill {skill.name}"
 
 
-def _apply_briefing_writer_skill(input_text: str, *, skill_text: str) -> str:
-    facts = [line.strip(" -\t") for line in input_text.splitlines() if line.strip()]
-    if not facts:
-        facts = [input_text.strip()]
-    if not any(facts):
-        return "Missing information: notes or task details."
+def _build_instructions(config: WebAgentConfig) -> str:
+    if not config.skills:
+        return config.instructions
+    if config.model_api != "chat_completions":
+        return config.instructions
 
-    lowered = [fact.lower() for fact in facts]
-    risks = [
-        fact
-        for fact, lower in zip(facts, lowered, strict=True)
-        if any(keyword in lower for keyword in ("risk", "block", "blocked", "pending", "issue"))
+    lines = [
+        config.instructions.rstrip(),
+        "",
+        "Configured local skills are available through the load_local_skill tool.",
+        "Call load_local_skill before applying a skill so you can follow its SKILL.md exactly.",
+        "Available local skills:",
     ]
-    actions = [
-        fact
-        for fact, lower in zip(facts, lowered, strict=True)
-        if any(keyword in lower for keyword in ("owner", "next", "todo", "due", "pending"))
-    ]
-    situation = "; ".join(facts[:3])
-
-    return textwrap.dedent(
-        f"""
-        Situation
-        {situation}
-
-        Risks
-        {_format_briefing_items(risks) or "No explicit risks were provided."}
-
-        Next actions
-        {_format_briefing_items(actions) or "Confirm owner, deadline, and next action."}
-
-        Skill source
-        {skill_text.splitlines()[0] if skill_text else "Local skill"}
-        """
-    ).strip()
-
-
-def _format_briefing_items(items: list[str]) -> str:
-    return "\n".join(f"- {item}" for item in items[:5])
+    for skill in config.skills:
+        description = skill.description or f"Local skill loaded from {skill.path}"
+        lines.append(f"- {skill.name}: {description}")
+    return "\n".join(lines)
 
 
 def _build_mcp_server(config: MCPServerConfig) -> MCPServer:
@@ -222,7 +209,7 @@ def _build_mcp_server(config: MCPServerConfig) -> MCPServer:
             name=config.name,
             params=cast(Any, params),
             cache_tools_list=config.cache_tools,
-            require_approval=config.require_approval,
+            require_approval=cast(Any, config.require_approval),
         )
 
     if config.transport == "sse":
@@ -230,7 +217,7 @@ def _build_mcp_server(config: MCPServerConfig) -> MCPServer:
             name=config.name,
             params=cast(Any, _http_params(config)),
             cache_tools_list=config.cache_tools,
-            require_approval=config.require_approval,
+            require_approval=cast(Any, config.require_approval),
         )
 
     if config.transport == "streamable_http":
@@ -238,7 +225,7 @@ def _build_mcp_server(config: MCPServerConfig) -> MCPServer:
             name=config.name,
             params=cast(Any, _http_params(config)),
             cache_tools_list=config.cache_tools,
-            require_approval=config.require_approval,
+            require_approval=cast(Any, config.require_approval),
         )
 
     raise ValueError(f"Unsupported MCP transport: {config.transport}")

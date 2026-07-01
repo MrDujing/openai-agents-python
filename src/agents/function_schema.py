@@ -8,8 +8,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Annotated, Any, Literal, get_args, get_origin, get_type_hints
 
-# griffelib exposes the `griffe` package at runtime but currently does not ship typing markers.
-from griffe import Docstring, DocstringSectionKind  # type: ignore[import-untyped]
+from griffe import Docstring, DocstringSectionKind
 from pydantic import BaseModel, Field, create_model
 from pydantic.fields import FieldInfo
 

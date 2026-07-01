@@ -2,18 +2,25 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
 MCPTransport = Literal["stdio", "sse", "streamable_http"]
-MCPRequireApproval = bool | Literal["always", "never"]
+MCPRequireApprovalPolicy = Literal["always", "never"]
+MCPRequireApproval = (
+    bool
+    | MCPRequireApprovalPolicy
+    | dict[str, bool | MCPRequireApprovalPolicy]
+    | dict[Literal["always", "never"], dict[Literal["tool_names"], list[str]]]
+)
 ModelAPI = Literal["responses", "chat_completions"]
 
 
 def _default_data_dir() -> Path:
-    return Path(__file__).resolve().parent / ".data"
+    return Path.cwd() / ".web-agent-data"
 
 
 @dataclass
@@ -48,12 +55,13 @@ class CompactionConfig:
 
 @dataclass
 class WebAgentConfig:
-    name: str = "Local Web Agent"
+    name: str = "Web Agent"
     model: str = "gpt-5.4-mini"
     model_api: ModelAPI = "responses"
     tracing_disabled: bool | None = None
     instructions: str = (
-        "You are a helpful local web agent. Answer clearly and ask for clarification "
+        "You are a helpful web agent built with the OpenAI Agents SDK. Answer clearly "
+        "and ask for clarification "
         "when the user request is ambiguous."
     )
     data_dir: Path = field(default_factory=_default_data_dir)
@@ -65,6 +73,10 @@ class WebAgentConfig:
     shell_needs_approval: bool = True
     include_server_in_tool_names: bool = True
     convert_mcp_schemas_to_strict: bool = True
+    mcp_connect_timeout_seconds: float | None = 10.0
+    mcp_cleanup_timeout_seconds: float | None = 10.0
+    mcp_strict: bool = False
+    mcp_connect_in_parallel: bool = False
 
     @property
     def resolved_sessions_db(self) -> Path:
@@ -130,6 +142,18 @@ def _apply_mapping(config: WebAgentConfig, payload: dict[str, Any]) -> None:
         config.include_server_in_tool_names = bool(payload["include_server_in_tool_names"])
     if "convert_mcp_schemas_to_strict" in payload:
         config.convert_mcp_schemas_to_strict = bool(payload["convert_mcp_schemas_to_strict"])
+    if "mcp_connect_timeout_seconds" in payload:
+        config.mcp_connect_timeout_seconds = _optional_positive_float(
+            payload["mcp_connect_timeout_seconds"], "mcp_connect_timeout_seconds"
+        )
+    if "mcp_cleanup_timeout_seconds" in payload:
+        config.mcp_cleanup_timeout_seconds = _optional_positive_float(
+            payload["mcp_cleanup_timeout_seconds"], "mcp_cleanup_timeout_seconds"
+        )
+    if "mcp_strict" in payload:
+        config.mcp_strict = bool(payload["mcp_strict"])
+    if "mcp_connect_in_parallel" in payload:
+        config.mcp_connect_in_parallel = bool(payload["mcp_connect_in_parallel"])
 
     if isinstance(payload.get("compaction"), dict):
         _apply_compaction(config.compaction, payload["compaction"])
@@ -187,8 +211,6 @@ def _parse_mcp_server(payload: Any, index: int) -> MCPServerConfig:
         payload.get("transport"),
         f"mcp_servers[{index}].transport",
     )
-    if transport not in {"stdio", "sse", "streamable_http"}:
-        raise ValueError(f"Unsupported MCP transport: {transport}")
 
     args = payload.get("args", [])
     if not isinstance(args, list) or not all(isinstance(arg, str) for arg in args):
@@ -224,6 +246,57 @@ def _parse_mcp_server(payload: Any, index: int) -> MCPServerConfig:
 
 
 def _parse_require_approval(value: Any, name: str) -> MCPRequireApproval:
+    if isinstance(value, bool):
+        return value
+    if value == "always":
+        return "always"
+    if value == "never":
+        return "never"
+    if isinstance(value, dict):
+        if _is_tool_list_require_approval(value):
+            return _parse_tool_list_require_approval(value, name)
+        parsed: dict[str, bool | MCPRequireApprovalPolicy] = {}
+        for tool_name, policy in value.items():
+            if not isinstance(tool_name, str) or not tool_name:
+                raise ValueError(f"{name} tool names must be non-empty strings")
+            parsed[tool_name] = _parse_require_approval_policy(policy, f"{name}.{tool_name}")
+        return parsed
+    raise ValueError(f"{name} must be true, false, always, or never")
+
+
+def _is_tool_list_require_approval(value: dict[Any, Any]) -> bool:
+    return any(
+        key in value and isinstance(value[key], dict) and "tool_names" in value[key]
+        for key in ("always", "never")
+    )
+
+
+def _parse_tool_list_require_approval(value: dict[Any, Any], name: str) -> MCPRequireApproval:
+    invalid_keys = sorted(str(key) for key in set(value) - {"always", "never"})
+    if invalid_keys:
+        raise ValueError(f"{name} has unsupported keys: {', '.join(invalid_keys)}")
+
+    parsed: dict[Literal["always", "never"], dict[Literal["tool_names"], list[str]]] = {}
+    for policy in ("always", "never"):
+        entry = value.get(policy, {"tool_names": []})
+        if not isinstance(entry, dict):
+            raise ValueError(f"{name}.{policy} must be an object")
+        tool_names = entry.get("tool_names", [])
+        parsed[policy] = {"tool_names": _parse_tool_names(tool_names, f"{name}.{policy}")}
+
+    overlap = set(parsed["always"]["tool_names"]) & set(parsed["never"]["tool_names"])
+    if overlap:
+        raise ValueError(f"{name} tool names cannot appear in both always and never")
+    return parsed
+
+
+def _parse_tool_names(value: Any, name: str) -> list[str]:
+    if not isinstance(value, list) or not all(isinstance(item, str) and item for item in value):
+        raise ValueError(f"{name}.tool_names must be a list of non-empty strings")
+    return list(value)
+
+
+def _parse_require_approval_policy(value: Any, name: str) -> bool | MCPRequireApprovalPolicy:
     if isinstance(value, bool):
         return value
     if value == "always":
@@ -300,6 +373,20 @@ def _apply_env(config: WebAgentConfig, env: Mapping[str, str]) -> None:
         config.compaction.candidate_threshold = _positive_int(
             env["WEB_AGENT_COMPACTION_THRESHOLD"], "WEB_AGENT_COMPACTION_THRESHOLD"
         )
+    if env.get("WEB_AGENT_MCP_STRICT"):
+        config.mcp_strict = _env_bool(env["WEB_AGENT_MCP_STRICT"])
+    if env.get("WEB_AGENT_MCP_CONNECT_IN_PARALLEL"):
+        config.mcp_connect_in_parallel = _env_bool(env["WEB_AGENT_MCP_CONNECT_IN_PARALLEL"])
+    if env.get("WEB_AGENT_MCP_CONNECT_TIMEOUT_SECONDS"):
+        config.mcp_connect_timeout_seconds = _optional_positive_float(
+            env["WEB_AGENT_MCP_CONNECT_TIMEOUT_SECONDS"],
+            "WEB_AGENT_MCP_CONNECT_TIMEOUT_SECONDS",
+        )
+    if env.get("WEB_AGENT_MCP_CLEANUP_TIMEOUT_SECONDS"):
+        config.mcp_cleanup_timeout_seconds = _optional_positive_float(
+            env["WEB_AGENT_MCP_CLEANUP_TIMEOUT_SECONDS"],
+            "WEB_AGENT_MCP_CLEANUP_TIMEOUT_SECONDS",
+        )
 
 
 def _normalize_paths(config: WebAgentConfig, *, base_dir: Path) -> None:
@@ -315,6 +402,8 @@ def _normalize_paths(config: WebAgentConfig, *, base_dir: Path) -> None:
     for server in config.mcp_servers:
         if server.cwd is not None:
             server.cwd = _resolve_path(server.cwd, base_dir=base_dir)
+        if server.command == "{python}":
+            server.command = sys.executable
 
 
 def _resolve_path(path: Path, *, base_dir: Path) -> Path:
@@ -339,6 +428,18 @@ def _positive_int(value: Any, name: str) -> int:
         parsed = int(value)
     except (TypeError, ValueError) as exc:
         raise ValueError(f"{name} must be an integer") from exc
+    if parsed <= 0:
+        raise ValueError(f"{name} must be greater than zero")
+    return parsed
+
+
+def _optional_positive_float(value: Any, name: str) -> float | None:
+    if value is None:
+        return None
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{name} must be a number or null") from exc
     if parsed <= 0:
         raise ValueError(f"{name} must be greater than zero")
     return parsed

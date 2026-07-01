@@ -146,6 +146,9 @@ cython_debug/
 # Example runtime state
 examples/sandbox/extensions/daytona/usaspending_text2sql/.audit_log.jsonl
 examples/sandbox/extensions/daytona/usaspending_text2sql/.session_state.json
+examples/web_agent/.data/
+examples/web_agent/demo/examples/
+.web-agent-data/
 
 # PyPI configuration file
 .pypirc

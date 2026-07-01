@@ -143,6 +143,11 @@ class LocalDirLazySkillSource(LazySkillSource):
     def _src_root(self, *, source_grants: tuple[SandboxPathGrant, ...] = ()) -> Path | None:
         if self.source.src is None:
             return None
+        if self.source.src.is_absolute() and not LocalDir._matching_source_grant(
+            self.source.src,
+            source_grants,
+        ):
+            return None
         try:
             src_root = self.source._resolve_local_dir_src_root(
                 Path.cwd(),

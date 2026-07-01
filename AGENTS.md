@@ -68,6 +68,15 @@ Treat the parameter and dataclass field order of exported runtime APIs as a comp
 - For OpenAI platform or SDK-specific docs changes, prefer `$openai-knowledge` for authoritative platform behavior and inspect the local code path for SDK behavior. Do not rely on generic API assumptions when documenting Responses, Chat Completions, Realtime, tools, MCP, or provider adapters.
 - For Realtime tracing changes, read [Realtime tracing architecture](.agents/references/realtime-tracing.md) before proposing SDK spans. Realtime API server traces and Agents SDK client traces are separate; `group_id` can correlate them but does not create a shared trace hierarchy.
 
+### Offline Dependency and Platform Policy
+
+- Python wheels must be loaded from `D:\PythonRepo` first. If a required wheel is missing from `D:\PythonRepo`, download it into `D:\PythonRepo` first, then install or load it only from that directory.
+- When downloading a new wheel package, collect wheels for both Linux and Windows and for Python 3.8, 3.10, 3.13, and 3.14. This normally means eight target artifacts per package: Linux and Windows for each of the four Python versions. If a package only publishes a universal `py3-none-any` wheel, keep that wheel in `D:\PythonRepo` and record that it covers the target matrix.
+- Prefer domestic package mirrors when downloading wheels. Use foreign mirrors only when the required artifacts are unavailable from domestic mirrors.
+- Do not delete or change files casually. Preserve user work, local artifacts, and existing project structure unless the task explicitly requires a change.
+- Code and project changes must consider Windows and Linux behavior. macOS compatibility is not required.
+- Code and project changes must remain usable in a fully offline environment. Any new dependency, tool, runtime artifact, or generated asset needed for operation must have an offline path, preferably through files already stored under `D:\PythonRepo` or another explicitly documented local project resource.
+
 ## Project Structure Guide
 
 ### Overview
